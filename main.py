@@ -10,7 +10,7 @@ online_users: Set[str] = set()
 
 @app.get("/", response_class=HTMLResponse)
 async def get_home():
-    with open("mainhtml.html", "r", encoding="utf-8") as f:
+    with open("main.py.html", "r", encoding="utf-8") as f:
         return f.read()
 
 @app.websocket("/ws/{username}")
