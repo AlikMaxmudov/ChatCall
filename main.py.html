@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatCall — переписка и звонки</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+
+        .tail-container * { font-family: 'Inter', system-ui, sans-serif; }
+        .logo-font { font-family: 'Space Grotesk', sans-serif; }
+
+        .chat-bubble {
+            max-width: 75%;
+            padding: 12px 18px;
+            border-radius: 20px;
+            position: relative;
+        }
+        .chat-bubble-self {
+            border-bottom-right-radius: 4px;
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: white;
+        }
+        .chat-bubble-other {
+            border-bottom-left-radius: 4px;
+            background: #1f2937;
+            color: white;
+        }
+        .online-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    </style>
+</head>
+<body class="tail-container bg-zinc-950 text-white min-h-screen flex flex-col">
+
+    <!-- HEADER -->
+    <header class="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-x-3">
+            <div class="w-9 h-9 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center text-2xl">📞</div>
+            <h1 class="logo-font text-3xl tracking-tighter">ChatCall</h1>
+        </div>
+        <div class="flex items-center gap-x-4">
+            <div class="bg-zinc-800 text-cyan-400 px-4 py-1.5 rounded-3xl text-sm font-medium flex items-center gap-x-2">
+                👤 <span id="current-username" class="font-mono"></span>
+            </div>
+            <button onclick="logout()" class="flex items-center gap-x-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 px-5 py-2 rounded-3xl text-sm font-medium">
+                Выйти
+            </button>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- SIDEBAR -->
+        <div class="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col">
+            <div class="p-6 border-b border-zinc-800">
+                <h2 class="uppercase text-xs font-semibold tracking-widest text-zinc-400 mb-3">Онлайн сейчас</h2>
+                <div id="online-list" class="space-y-1"></div>
+            </div>
+            <div class="flex-1 p-4 text-xs text-zinc-500 flex items-center justify-center border-t border-zinc-800">
+                Пригласи друга по ссылке<br>
+                <span id="share-link" class="font-mono text-cyan-400 cursor-pointer" onclick="copyShareLink()"></span>
+            </div>
+        </div>
+
+        <!-- MAIN CHAT AREA -->
+        <div class="flex-1 flex flex-col">
+            <div id="chat-header" class="bg-zinc-900 px-6 py-4 border-b border-zinc-800 flex items-center justify-between hidden">
+                <div class="flex items-center gap-x-3">
+                    <div class="w-9 h-9 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center text-xl">👤</div>
+                    <div>
+                        <div id="chat-with-name" class="font-semibold text-lg"></div>
+                        <div class="text-emerald-400 text-sm flex items-center gap-x-1">
+                            <span class="online-dot w-2 h-2 bg-emerald-400 rounded-full"></span> онлайн
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-x-3">
+                    <button onclick="startAudioCall()" class="flex items-center gap-x-2 bg-gradient-to-r from-cyan-400 to-blue-600 text-white px-6 py-3 rounded-3xl font-medium">
+                        📞 Позвонить
+                    </button>
+                    <button onclick="endCall()" id="end-call-btn" class="hidden bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-3xl font-medium">
+                        Завершить
+                    </button>
+                </div>
+            </div>
+
+            <div id="chat-area" class="flex-1 p-6 overflow-y-auto flex flex-col gap-y-4 bg-zinc-950"></div>
+
+            <div id="message-input-area" class="border-t border-zinc-800 bg-zinc-900 p-4 flex items-center gap-x-3 hidden">
+                <input id="message-input" onkeydown="if(event.key === 'Enter') sendMessage()"
+                       type="text" placeholder="Напиши сообщение..."
+                       class="flex-1 bg-zinc-800 text-white placeholder-zinc-400 rounded-3xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                <button onclick="sendMessage()" class="w-12 h-12 bg-cyan-400 hover:bg-cyan-300 rounded-3xl flex items-center justify-center">
+                    →
+                </button>
+            </div>
+
+            <div id="empty-state" class="flex-1 flex flex-col items-center justify-center text-center px-10">
+                <div class="text-8xl mb-6">👋</div>
+                <h2 class="text-3xl font-semibold mb-2">Выбери собеседника</h2>
+                <p class="text-zinc-400">Кто-то онлайн? Нажми на имя слева</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Incoming call modal -->
+    <div id="incoming-call-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
+        <div class="bg-zinc-900 rounded-3xl max-w-md w-full mx-4 p-8 text-center">
+            <div class="text-7xl mb-6">📲</div>
+            <h3 class="text-2xl font-semibold mb-1">Звонок от</h3>
+            <p id="caller-name" class="text-cyan-400 text-3xl font-medium mb-8"></p>
+            <div class="flex gap-x-4">
+                <button onclick="declineCall()" class="flex-1 bg-red-500 hover:bg-red-600 py-5 rounded-3xl text-lg">Отклонить</button>
+                <button onclick="acceptCall()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 py-5 rounded-3xl text-lg">Принять</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active call overlay -->
+    <div id="active-call-overlay" class="hidden fixed bottom-6 right-6 bg-zinc-900/95 backdrop-blur-xl border border-cyan-400 rounded-3xl px-6 py-4 shadow-2xl flex items-center gap-x-4 z-[10000]">
+        <div class="flex items-center gap-x-3">
+            <div class="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
+            <span id="call-with-name" class="font-semibold"></span>
+        </div>
+        <button onclick="endCall()" class="bg-red-500 text-white px-8 py-2 rounded-3xl text-sm font-medium">Завершить</button>
+    </div>
+
+    <!-- Важно! Элемент для воспроизведения звука -->
+    <audio id="remote-audio" autoplay playsinline></audio>
+
+    <script>
+    let socket = null;
+    let myUsername = '';
+    let currentChatUser = null;
+    let peerConnection = null;
+    let localStream = null;
+    let remoteAudio = null;
+    let incomingOfferData = null;
+    let incomingCaller = null;
+
+    const config = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            {
+                urls: 'turn:YOUR_PUBLIC_IP_OR_DOMAIN:3478',
+                username: 'testuser',
+                credential: 'testpass'
+            }
+        ]
+    };
+
+    function connectWebSocket(username) {
+        socket = new WebSocket(`ws://${window.location.host}/ws/${encodeURIComponent(username)}`);
+
+        socket.onopen = () => {
+            console.log('✅ WebSocket подключён');
+            document.getElementById('current-username').textContent = username;
+        };
+
+        socket.onmessage = async (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'online') {
+                renderOnlineList(data.users);
+            } else if (data.type === 'chat' && data.from === currentChatUser) {
+                addMessageToUI(data.from, data.message, false);
+            } else if (data.type === 'offer') {
+                incomingOfferData = data;
+                incomingCaller = data.from;
+                document.getElementById('caller-name').textContent = incomingCaller;
+                document.getElementById('incoming-call-modal').classList.remove('hidden');
+            } else if (data.type === 'answer') {
+                handleAnswer(data);
+            } else if (data.type === 'ice-candidate') {
+                handleIceCandidate(data);
+            }
+        };
+    }
+
+    function sendViaSocket(payload) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(payload));
+        }
+    }
+
+    function renderOnlineList(users) {
+        const container = document.getElementById('online-list');
+        container.innerHTML = '';
+
+        users.forEach(user => {
+            if (user === myUsername) return;
+            const div = document.createElement('div');
+            div.className = `flex items-center gap-x-3 px-4 py-3 rounded-3xl hover:bg-zinc-800 cursor-pointer ${currentChatUser === user ? 'bg-cyan-400/10' : ''}`;
+            div.innerHTML = `
+                <div class="w-8 h-8 bg-gradient-to-br from-cyan-300 to-blue-500 rounded-2xl flex items-center justify-center text-xl">👤</div>
+                <div class="flex-1">
+                    <div class="font-medium">${user}</div>
+                    <div class="text-emerald-400 text-xs">онлайн</div>
+                </div>
+            `;
+            div.onclick = () => selectUser(user);
+            container.appendChild(div);
+        });
+
+        if (users.length <= 1) {
+            container.innerHTML = `<div class="text-zinc-400 text-center py-8">Пока никого нет 😔<br>Поделись ссылкой!</div>`;
+        }
+    }
+
+    function selectUser(username) {
+        currentChatUser = username;
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('chat-header').classList.remove('hidden');
+        document.getElementById('message-input-area').classList.remove('hidden');
+        document.getElementById('chat-with-name').textContent = username;
+        document.getElementById('chat-area').innerHTML = '';
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('message-input');
+        const text = input.value.trim();
+        if (!text || !currentChatUser) return;
+
+        addMessageToUI(myUsername, text, true);
+        sendViaSocket({ type: 'chat', to: currentChatUser, message: text });
+        input.value = '';
+    }
+
+    function addMessageToUI(from, text, isSelf) {
+        const area = document.getElementById('chat-area');
+        const bubble = document.createElement('div');
+        bubble.className = `flex ${isSelf ? 'justify-end' : 'justify-start'}`;
+        bubble.innerHTML = `<div class="chat-bubble ${isSelf ? 'chat-bubble-self' : 'chat-bubble-other'}">${text}</div>`;
+        area.appendChild(bubble);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    // ==================== WEBRTC ====================
+    async function startAudioCall() {
+        if (!currentChatUser) return;
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            peerConnection = new RTCPeerConnection(config);
+
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            peerConnection.ontrack = (event) => {
+                if (remoteAudio && event.streams[0]) {
+                    remoteAudio.srcObject = event.streams[0];
+                    remoteAudio.play().catch(e => console.error('Play error:', e));
+                }
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendViaSocket({
+                        type: 'ice-candidate',
+                        to: currentChatUser,
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            sendViaSocket({ type: 'offer', to: currentChatUser, offer: offer });
+
+            showActiveCallOverlay(currentChatUser);
+        } catch (err) {
+            alert('Ошибка микрофона: ' + err.message);
+        }
+    }
+
+    async function acceptCall() {
+        document.getElementById('incoming-call-modal').classList.add('hidden');
+        if (!incomingOfferData) return;
+
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            peerConnection = new RTCPeerConnection(config);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.ontrack = (event) => {
+                if (remoteAudio && event.streams[0]) {
+                    remoteAudio.srcObject = event.streams[0];
+                    remoteAudio.play().catch(e => console.error('Play error:', e));
+                }
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendViaSocket({
+                        type: 'ice-candidate',
+                        to: incomingCaller,
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(incomingOfferData.offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            sendViaSocket({ type: 'answer', to: incomingCaller, answer: answer });
+
+            showActiveCallOverlay(incomingCaller);
+            currentChatUser = incomingCaller;
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function declineCall() {
+        document.getElementById('incoming-call-modal').classList.add('hidden');
+        if (incomingCaller) sendViaSocket({ type: 'decline', to: incomingCaller });
+        incomingCaller = null;
+    }
+
+    async function handleAnswer(data) {
+        if (peerConnection) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+    }
+
+    async function handleIceCandidate(data) {
+        if (peerConnection) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) {}
+        }
+    }
+
+    function endCall() {
+        if (peerConnection) peerConnection.close();
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        if (remoteAudio) remoteAudio.srcObject = null;
+        peerConnection = null;
+        localStream = null;
+        document.getElementById('active-call-overlay').classList.add('hidden');
+    }
+
+    function showActiveCallOverlay(withUser) {
+        document.getElementById('call-with-name').textContent = withUser;
+        document.getElementById('active-call-overlay').classList.remove('hidden');
+    }
+
+    function copyShareLink() {
+        const link = `${window.location.origin}?join=${myUsername}`;
+        navigator.clipboard.writeText(link).then(() => alert('✅ Ссылка скопирована!'));
+    }
+
+    function logout() {
+        if (socket) socket.close();
+        location.reload();
+    }
+
+    function initApp() {
+        remoteAudio = document.getElementById('remote-audio');
+        remoteAudio.volume = 1.0;
+
+        const name = prompt('Как тебя зовут в чате?', 'Ты');
+        if (!name || !name.trim()) return;
+        myUsername = name.trim();
+
+        connectWebSocket(myUsername);
+        console.log('%c🚀 ChatCall запущен!', 'color:#00d4ff;font-size:14px');
+    }
+
+    window.onload = initApp;
+    </script>
+
+</body>
+</html>
