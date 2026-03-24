@@ -49,4 +49,5 @@ async def broadcast_online():
             online_users.discard(username)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))  # Render задаёт PORT автоматически
+    uvicorn.run(app, host="0.0.0.0", port=port)  # убрал reload=True
