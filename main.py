@@ -10,10 +10,12 @@ app = FastAPI(title="ChatCall")
 connected_users: Dict[str, WebSocket] = {}
 online_users: Set[str] = set()
 
+
 @app.get("/", response_class=HTMLResponse)
 async def get_home():
     with open("templates/main.py.html", "r", encoding="utf-8") as f:
         return f.read()
+
 
 @app.websocket("/ws/{username}")
 async def websocket_endpoint(websocket: WebSocket, username: str):
@@ -31,7 +33,8 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                     "from": username,
                     "message": data.get("message")
                 })
-            elif data.get("type") in ["offer", "answer", "ice-candidate", "decline"] and to_user in connected_users:
+            elif data.get("type") in ["offer", "answer", "ice-candidate", "decline",
+                                      "screen-stop"] and to_user in connected_users:
                 data["from"] = username
                 await connected_users[to_user].send_json(data)
     except WebSocketDisconnect:
@@ -41,6 +44,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
         online_users.discard(username)
         await broadcast_online()
 
+
 async def broadcast_online():
     online_list = list(online_users)
     for username, ws in list(connected_users.items()):
@@ -49,6 +53,7 @@ async def broadcast_online():
         except:
             connected_users.pop(username, None)
             online_users.discard(username)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))  # Render задаёт PORT автоматически
